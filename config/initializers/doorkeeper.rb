@@ -267,7 +267,21 @@ Doorkeeper.configure do
   # redirects to localhost for example).
 
   force_ssl_in_redirect_uri do |uri|
-    !Rails.env.development? && ["127.0.0.1", "::1"].exclude?(uri.host)
+    # Unchanged upstream behaviour: no TLS requirement in development, and
+    # loopback addresses are always allowed.
+    next false if Rails.env.development? || ["127.0.0.1", "::1"].include?(uri.host)
+
+    # Added for self hosted instances that deliberately run without TLS
+    # (`force_ssl: false` in config/settings.local.yml or
+    # config/settings/<environment>.local.yml, see
+    # config/environments/production.rb). Such an instance must still be able to
+    # register its own redirect URI, otherwise neither the web site nor iD can
+    # obtain a token at all. Only the instance's own host is exempted, and only
+    # while TLS is switched off: with the default `force_ssl: true` this returns
+    # exactly what upstream returns.
+    tls_configured = Settings.key?(:force_ssl) ? Settings.force_ssl : true
+    own_host = Settings.server_url.to_s.split(":").first
+    !(!tls_configured && own_host.present? && uri.host == own_host)
   end
 
   # Specify what redirect URI's you want to block during Application creation.

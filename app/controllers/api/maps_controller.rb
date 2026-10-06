@@ -60,12 +60,25 @@ module Api
 
       @ways = ways.filter(&:visible?)
 
+      # 必须用 preload 而不是 includes。
+      #
+      # Relation.nodes / Relation.ways 内部都是 joins(:relation_members)，所以当这里
+      # 再对**同一个关联**写 includes(:relation_members) 时，Rails 认为它"已经 join
+      # 过了"、不再单独预加载，直接拿 join 到的那些行当作关系的成员 —— 于是返回的
+      # 关系只带「命中 bbox 的那部分成员」。
+      #
+      # 后果是灾难性的：编辑器（iD）拿到的关系在它看来就是完整的（没有任何"成员未
+      # 下载"的提示），一旦编辑保存，残缺成员表就会整表写回 API，其余成员被永久删除。
+      # 实测 G104 道路关系一次掉了 20 条 ref=G104 的 way（约 9.6 km），海岸线关系也
+      # 反复丢失。
+      #
+      # preload 一定会另发一条查询，从而把成员完整加载进来。
       @relations = Relation.nodes(@nodes)
                            .visible
-                           .includes(:changeset, :relation_members, :element_tags) +
+                           .preload(:changeset, :relation_members, :element_tags) +
                    Relation.ways(@ways)
                            .visible
-                           .includes(:changeset, :relation_members, :element_tags)
+                           .preload(:changeset, :relation_members, :element_tags)
 
       # we do not normally return the "other" partners referenced by an relation,
       # e.g. if we return a way A that is referenced by relation X, and there's

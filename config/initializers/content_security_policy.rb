@@ -11,6 +11,43 @@ Rails.application.configure do
   img_src = [:self, :data, "www.gravatar.com", "*.wp.com", "tile.openstreetmap.org", "gps.tile.openstreetmap.org", "api.thunderforest.com", "tile.tracestrack.com", "*.openstreetmap.fr"]
   script_src = [:self]
 
+  # Tiles are served through the `edge` reverse proxy on the same origin as the
+  # site, and both config files below now use root-relative paths
+  # ("/tile/{z}/{x}/{y}.png"), so the browser resolves them against :self and
+  # nothing has to be added here. The loop is kept because an absolute URL is
+  # still perfectly valid in either file - for example an overlay served by a
+  # third party, or a setup that bypasses the edge - and hardcoding the
+  # resulting origin a second time is exactly how a self hosted instance ends
+  # up with every tile blocked by CSP.
+  #
+  # Two files describe tile sources nowadays:
+  #   config/layers.yml      - the Leaflet map on the main site
+  #   config/id_imagery.yml  - the basemap list of the iD editor (/id)
+  # Both need their origins allowed; the key holding the URL template differs.
+  begin
+    {
+      "config/layers.yml" => %w[tileUrl tileUrlDark styleUrl styleUrlDark],
+      "config/id_imagery.yml" => %w[template]
+    }.each do |relative_path, url_keys|
+      path = Rails.root.join(relative_path)
+      next unless path.exist?
+
+      Array(YAML.load_file(path)).each do |layer|
+        next unless layer.is_a?(Hash)
+
+        layer.values_at(*url_keys).compact.each do |template|
+          origin = template.sub("{s}", "*")[/\Ahttps?:\/\/[^\/]+/]
+          next if origin.blank?
+
+          connect_src << origin unless connect_src.include?(origin)
+          img_src << origin unless img_src.include?(origin)
+        end
+      end
+    end
+  rescue StandardError => e
+    warn "content_security_policy: could not derive tile sources from config: #{e.message}"
+  end
+
   connect_src << Settings.matomo["location"] if defined?(Settings.matomo)
   img_src << Settings.matomo["location"] if defined?(Settings.matomo)
   script_src << Settings.matomo["location"] if defined?(Settings.matomo)

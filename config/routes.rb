@@ -214,6 +214,21 @@ OpenStreetMap::Application.routes.draw do
   resource :share_pane, :path => "/panes/share", :only => :show
   resource :webgl_error_pane, :path => "/panes/webgl_error", :only => :show
   get "/id" => "site#id"
+  # iD 编辑器的底图清单。前端会把它当作 iD 自带的 imagery.min.json 来读
+  # （见 app/views/site/id.html.erb 对 asset map 的改写），内容来自
+  # config/id_imagery.yml。放在 /id 下面是为了让两者的关系一目了然。
+  get "/id/imagery.json" => "id_imagery#show", :as => :id_imagery
+  # iD 编辑器的 tagging schema（预设 / 字段 / 分类 / 默认列表 + tagging 语言包）。
+  # iD 本来在浏览器里直接去 jsDelivr 取 @openstreetmap/id-tagging-schema，
+  # 这里换成合并了我们 minecraft:* 预设的产物（config/id_minecraft/，由
+  # scripts/build_id_minecraft_presets.rb 生成）。路径里带 data/ 是为了和
+  # iD 原本的逻辑文件名同形，asset map 的键才好写。
+  #   /id/minecraft/presets.min.json
+  #   /id/minecraft/translations/zh-CN.min.json
+  # format: false —— 否则 ".min.json" 会被 Rails 当成响应格式切掉。
+  get "/id/minecraft/*path" => "id_presets#show", :as => :id_minecraft_schema,
+      :format => false,
+      :constraints => { :path => %r{[A-Za-z0-9_./-]+} }
   resource :feature_query, :path => "query", :only => :show
   post "/user/:display_name/confirm/resend" => "confirmations#confirm_resend", :as => :user_confirm_resend
   match "/user/:display_name/confirm" => "confirmations#confirm", :via => [:get, :post]

@@ -1,0 +1,1318 @@
+# =============================================================================
+# minecraft:* 标签的 iD 元素预设（**唯一手写源文件**）
+# =============================================================================
+#
+# 这个文件把本项目自定义的 minecraft:* 标签整理成 iD 编辑器里可以点选的
+# 「元素预设」，按「杂项 / 自然类 / 基建类 / 生产类 / 红石类」五类分组。
+#
+# 它不是给 iD 直接读的：iD 只认 `presets.min.json` / `fields.min.json` /
+# `preset_categories.min.json` / `preset_defaults.min.json` 那套 id-tagging-schema
+# 格式。本文件由
+#
+#     scripts/build_id_minecraft_presets.rb build
+#
+# 和「基础 schema」合并（不是替换！iD 原有 1700+ 个预设一个都不能少）之后，
+# 生成产物到 config/id_minecraft/，再由 IdPresetsController 在 /id/... 上伺服，
+# 最后通过 app/views/site/id.html.erb 的 asset map 顶掉 iD 默认去 CDN 取的那几个文件。
+#
+# 详细原理与操作步骤见 README-ID-PRESETS.md。
+#
+# -----------------------------------------------------------------------------
+# 内容来源（不自己发明键值）
+# -----------------------------------------------------------------------------
+#   1. ../carto之后的计划.txt           —— 键/值/中文名/几何/辅助键的规范
+#   2. ../osm-carto4mc/style/minecraft*.mss
+#      ../osm-carto4mc/project.mml      —— 样式表真正渲染了哪些键值、用什么图层（点/线/面）
+#      ../osm-carto4mc/docs/minecraft-stylesheet.md、minecraft-placeholders.md
+#
+# 计划里写明「不参与 carto4mc 渲染」的键（minecraft=yes、minecraft:addon、
+# minecraft:species、minecraft:genus、minecraft:ore_vein、minecraft:sport、
+# minecraft:product、minecraft:conveyor、minecraft:signal_wired）**照样做预设**——
+# 它们仍然可以被编辑，只是不出图。
+#
+# -----------------------------------------------------------------------------
+# 几何（geometry）怎么定的
+# -----------------------------------------------------------------------------
+#   计划文档写了「可点可面 / 只可用点 / 可用于点线面」的，照写；
+#   没写的，按样式表实际支持的图层：
+#     minecraft-areas（polygon）、minecraft-points / minecraft-structure-points /
+#     minecraft-amenity-points / minecraft-industrial-points / minecraft-redstone-points
+#     （point，且 SQL 把闭合面用 ST_PointOnSurface 并进来）、
+#     minecraft-portal-lines（linestring）。
+#   所以「面也能出图」的键给 ["point","area"]，「线才有图层」的键给 ["line"]。
+#
+# -----------------------------------------------------------------------------
+# 辅助键（area=yes / building=*）为什么没有塞进 tags
+# -----------------------------------------------------------------------------
+#   计划里对很多结构写了「面元素需要加 area=* / building=*」。这里**不写进 tags**，原因：
+#     1. 一个 preset 只有一份 tags，而它同时服务点与面；给点元素塞 area=yes /
+#        building=yes 是错的（`area=yes` 挂在 node 上无意义，`building=yes` 挂在 node
+#        上会让 iD 把它当成建筑物）。
+#     2. `area=yes` iD 会**自动补**：preset 的 geometry 含 area、tags 又不隐含面时，
+#        iD 在 setTags() 里自动加 area=yes（iD.js 的 preset.setTags，见
+#        modules/presets/preset.js）。所以「面元素需要加 area=*」这条已经被编辑器满足了。
+#     3. carto4mc 的 minecraft-*-points 图层都 UNION 了面中心点，所以标注成面照样出图。
+#   要 `building=*` 的结构（如 mansion、bastion_remnant），请在地图里用 iD 自带的
+#   建筑物字段补一个，或在 tags 里手加 —— 见 README-ID-PRESETS.md 的「设计取舍」。
+#
+# -----------------------------------------------------------------------------
+# icon 只能用 iD 真的有的图标
+# -----------------------------------------------------------------------------
+#   iD 把 preset.icon 直接当成 SVG sprite 的 symbol id 用（`<use href="#"+icon>`），
+#   所以名字必须严格等于某个 sprite 里的 id：`maki-*` / `temaki-*` / `iD-*` /
+#   `roentgen-*` / `fas-*`。
+#   ⚠️ 文档/老版本 iD 里的裸名字（circle、water、tree、building、factory…）在本版本
+#   **不存在**，用了就是一个空图标。
+#   合法的名字清单由 `scripts/build_id_minecraft_presets.rb icons` 从容器里的
+#   dist/img/*-sprite.svg 抽出来，存 vendor/id-tagging-schema/icon-names.txt，
+#   build 时会逐个校验，写错就直接报错退出。
+# =============================================================================
+
+meta:
+  # 我们的 preset / field id 前缀，合并时用它来识别「自己人」，也用来做重复 id 检查
+  id_prefix: "minecraft"
+  field_prefix: "minecraft_"
+  category_prefix: "category-minecraft-"
+
+  # 基础 schema 的版本。这里写的是 iD 的 package.json 里
+  # `"@openstreetmap/id-tagging-schema": "^6.13.4"` 这个 semver 范围在 jsDelivr 上
+  # 解析到的实际版本（iD 运行时就是这么解析的，见 iD.js 的 fileStore/config/id.js）。
+  # 升级 @openstreetmap/id 之后要重跑 `build_id_minecraft_presets.rb fetch` 换基础文件。
+  base_version_range: "^6.13.4"
+
+  # 需要注入中文/英文文案的 tagging 语言包。
+  # 为什么必须注入：iD 里 preset 的 name/terms 有 JSON 兜底（我们写了中文它就用中文），
+  # 但**分类名、字段名、字段选项名**只认 `_tagging.presets.*` 翻译，没有兜底。
+  # 不注入的话分类磁贴会显示成 `category-minecraft-nature`、下拉框显示原始值。
+  # 注入是「基础语言包 + 我们的补充」，所以不会丢原有翻译。
+  translations:
+    - zh-CN
+    - zh-TW
+    - zh
+    - en
+
+# =============================================================================
+# 自定义字段（iD 的 field）
+# =============================================================================
+# type: combo（可下拉可手输）/ text（纯手输）。
+# 一个字段 = 一个 minecraft 键，options 就是计划文档里限定/列举的值。
+# 中文名走 translations（label + options.<value>），脚本会自动生成。
+fields:
+
+  minecraft_addon:
+    key: "minecraft:addon"
+    type: combo
+    label: 模组来源
+    terms: ["minecraft addon", "mod", "模组", "来源"]
+    options:
+      minecraft: 原版 Minecraft
+
+  minecraft_block:
+    key: "minecraft:block"
+    type: combo
+    label: 方块 ID
+    terms: ["minecraft block", "block id", "方块", "刷怪笼"]
+    options:
+      spawner: 刷怪笼
+      monster_spawner: 刷怪笼（旧写法）
+      moster_spawner: 刷怪笼（兼容错拼）
+
+  minecraft_species:
+    key: "minecraft:species"
+    type: text
+    label: Minecraft 物种（实体 ID）
+    terms: ["minecraft species", "entity id", "物种", "实体"]
+
+  minecraft_genus:
+    key: "minecraft:genus"
+    type: text
+    label: Minecraft 物种大类
+    terms: ["minecraft genus", "大类", "属"]
+
+  minecraft_landuse:
+    key: "minecraft:landuse"
+    type: combo
+    label: Minecraft 土地使用
+    terms: ["minecraft landuse", "土地使用", "规划"]
+    options:
+      village: 村民相关区域
+      redstone: 红石电路区域
+      mob_switch: 伪和平区域
+      empty: 空置域
+      command: 命令方块/技术性区域
+
+  minecraft_nature:
+    key: "minecraft:nature"
+    type: check
+    label: 自然生成
+    terms: ["minecraft nature", "natural", "自然生成"]
+
+  minecraft_structure:
+    key: "minecraft:structure"
+    type: combo
+    label: Minecraft 生成结构
+    terms: ["minecraft structure", "structure", "结构", "生成结构"]
+    options:
+      ancient_city: 远古城市
+      bastion_remnant: 堡垒遗迹
+      desert_pyramid: 沙漠神殿
+      end_city: 末地城
+      fortress: 下界要塞
+      igloo: 雪屋
+      jungle_pyramid: 丛林要塞
+      mansion: 林地府邸
+      mineshaft: 废弃矿井
+      monument: 海底神殿
+      ocean_ruin: 海底废墟
+      pillager_outpost: 掠夺者前哨站
+      ruined_portal: 废弃传送门
+      shipwreck: 沉船
+      stronghold: 要塞
+      swamp_hut: 沼泽小屋
+      trail_ruins: 古迹废墟
+      trial_chambers: 试炼密室
+      village: 村庄
+
+  minecraft_igloo_underground:
+    key: "minecraft:structure:igloo:underground"
+    type: check
+    label: 雪屋含地下室
+    terms: ["igloo underground", "雪屋地牢", "地下室"]
+
+  minecraft_ore_vein:
+    key: "minecraft:ore_vein"
+    type: combo
+    label: 矿脉
+    terms: ["minecraft ore vein", "矿脉", "矿石"]
+    options:
+      copper: 铜矿脉
+      iron: 铁矿脉
+
+  minecraft_amenity:
+    key: "minecraft:amenity"
+    type: combo
+    label: Minecraft 设施
+    terms: ["minecraft amenity", "设施", "公共设施"]
+    options:
+      ghast_parking: 恶魂停车场
+      nautilus_parking: 鹦鹉螺港
+      elytra: 鞘翅起飞点
+      villager_clinic: 僵尸村民治疗站
+      villager_love_hotel: 村民繁殖站
+      villager_exchange: 村民交易所
+      enchanting: 公共附魔台
+      ender_chest: 公共末影箱
+      chicken_bbq: 烤鸡机
+      working_station: 公共工作站
+      afk_pool: 挂机池
+
+  minecraft_portal:
+    key: "minecraft:portal"
+    type: combo
+    label: 传送门种类
+    terms: ["minecraft portal", "portal", "传送门", "门"]
+    options:
+      "yes": 不表示种类
+      gate: 垂直门框类
+      podium: 水平类
+      gateway: 开放接触式
+      stone: 交互式传送石
+
+  minecraft_portal_type:
+    key: "minecraft:portal:type"
+    type: combo
+    label: 传送门类型
+    terms: ["portal type", "传送门类型", "下界传送门", "末地传送门"]
+    options:
+      nether: 下界传送门
+      end: 末地传送门和返回传送门
+      gateway: 末地折跃门
+
+  minecraft_sport:
+    key: "minecraft:sport"
+    type: combo
+    label: Minecraft 竞技类型
+    terms: ["minecraft sport", "竞技", "比赛"]
+    options:
+      pvp: 玩家对抗
+      1v1duel: 二人决斗
+      brawl: 多人混战
+      spleef: 掘一死战
+      speedrun: 速通
+      pve: 玩家对电脑
+
+  minecraft_industrial:
+    key: "minecraft:industrial"
+    type: combo
+    label: Minecraft 生产设施
+    terms: ["minecraft industrial", "工业", "生产设施", "机器"]
+    options:
+      furnace: 大型熔炉组
+      cobblestone_generator: 大型刷石机
+      classification: 大型公共物品分类机
+      tree_farm: 全自动树厂
+      farmland: 农厂
+      iron_golem_farm: 刷铁机
+      ice: 刷冰机
+      potion: 大型多功能药水机
+      agrarian: 植物催熟剂机械
+      mob_farm: 刷怪塔（总类）
+
+  minecraft_mob_farm:
+    key: "minecraft:mob_farm"
+    type: combo
+    label: 刷怪塔类型
+    terms: ["minecraft mob farm", "刷怪塔", "刷怪笼"]
+    options:
+      slaughterhouse: 和平生物刷怪塔
+      pigman: 猪人刷怪塔
+      swamp: 沼泽刷怪塔
+      spawner: 刷怪笼刷怪塔
+      creaking: 嘎吱刷怪塔
+      shulker: 潜影贝刷怪塔
+      pillager_outpost: 改造后的前哨站
+      raid: 掠夺塔
+      enderman: 末影人刷怪塔
+      guardian: 远古守卫者刷怪塔
+      gravity: 刷沙机
+      fish: 鱼塔
+
+  minecraft_craft:
+    key: "minecraft:craft"
+    type: combo
+    label: Minecraft 生产工序
+    terms: ["minecraft craft", "车间", "机械", "工序"]
+    options:
+      crafter: 自动合成设备
+      carpet: 地毯机
+      railway: 刷铁轨机
+      snow: 刷雪机
+      destroy: 方块破坏室
+      slaughterhouse: 处死装置
+      update_suppressor: 更新抑制装置
+      packager: 打包器
+      unpackager: 拆包器
+      panel: 前端控制面板
+      chunk_loader: 区块加载器
+
+  minecraft_product:
+    key: "minecraft:product"
+    type: text
+    label: Minecraft 产出
+    terms: ["minecraft product", "产出", "产物"]
+
+  minecraft_conveyor:
+    key: "minecraft:conveyor"
+    type: text
+    label: 传送带类型
+    terms: ["minecraft conveyor", "传送带"]
+
+  minecraft_redstone:
+    key: "minecraft:redstone"
+    type: combo
+    label: 红石机械
+    terms: ["minecraft redstone", "红石", "机器"]
+    options:
+      "yes": 红石机械（不细分）
+      music: 红石音乐盒
+      cannon: 定向抛射设施
+      timer: 计时器
+      memory: 数据存储设备
+      monitor: 显示屏幕
+      tnt_spawner: TNT 生成装置
+
+  minecraft_signal_wired:
+    key: "minecraft:signal_wired"
+    type: text
+    label: 信号线材质
+    terms: ["signal wired", "红石线", "信号线"]
+
+  minecraft_cannon:
+    key: "minecraft:cannon"
+    type: combo
+    label: 大炮类型
+    terms: ["minecraft cannon", "大炮", "炮"]
+    options:
+      tnt: TNT 大炮
+      end_pearl: 末影珍珠炮
+      arrow: 箭矢加速器
+
+# =============================================================================
+# 五个类别 —— 对应 iD 预设面板里的分组磁贴
+# =============================================================================
+# members 不在这里写：脚本按每个 preset 的 category 字段自动汇总（单一事实来源）。
+# more_fields 是该类别预设默认的「更多字段」，preset 可以用自己的 more_fields 覆盖。
+categories:
+
+  - id: category-minecraft-misc
+    name: 杂项
+    icon: maki-marker-stroked
+    terms: ["minecraft misc", "杂项", "其他"]
+    more_fields: [minecraft_addon, minecraft_species, minecraft_genus]
+
+  - id: category-minecraft-nature
+    name: 自然类
+    icon: maki-natural
+    terms: ["minecraft nature", "自然类", "自然", "结构"]
+    more_fields: [minecraft_nature, minecraft_addon]
+
+  - id: category-minecraft-infrastructure
+    name: 基建类
+    icon: maki-town-hall
+    terms: ["minecraft infrastructure", "基建类", "基建", "设施", "传送门"]
+    more_fields: [minecraft_addon, minecraft_species, minecraft_genus]
+
+  - id: category-minecraft-production
+    name: 生产类
+    icon: maki-industry
+    terms: ["minecraft production", "生产类", "生产", "工业", "机器"]
+    more_fields: [minecraft_industrial, minecraft_mob_farm, minecraft_craft, minecraft_product, minecraft_addon]
+
+  - id: category-minecraft-redstone
+    name: 红石类
+    icon: temaki-power_circuit
+    terms: ["minecraft redstone", "红石类", "红石"]
+    more_fields: [minecraft_redstone, minecraft_cannon, minecraft_product, minecraft_addon]
+
+# 把我们的分类插进 iD 预设面板的默认列表（preset_defaults），否则用户必须先搜索才能看到。
+#   position: before —— 插在 iD 自带分类前面（这个实例是 Minecraft 专用，优先露出）
+#   geometries        —— 只插进这些几何的列表；留空表示按成员的几何自动判断
+defaults:
+  position: before
+  geometries: []
+
+# =============================================================================
+# 预设本体
+# =============================================================================
+# 每个 key 是 preset id（iD 用 `/` 表示层级，母级不需要真的存在一个 preset）。
+#   name      中文名（来自计划文档）
+#   terms     搜索别名（英文 + 中文）
+#   icon      必须是合法 sprite id（build 时校验）
+#   geometry  point / line / area
+#   tags      只写这个预设代表的键值；确实必需的辅助键才加
+#   fields    该元素的字段；省略时 = [name] + more_fields
+#   more_fields 省略时用所属类别的默认值
+presets:
+
+  # ---------------------------------------------------------------------------
+  # 杂项
+  # ---------------------------------------------------------------------------
+
+  minecraft/general/yes:
+    name: Minecraft 相关内容
+    terms: ["minecraft", "minecraft yes", "Minecraft 相关内容", "Minecraft"]
+    icon: maki-marker-stroked
+    geometry: [point, line, area]
+    category: category-minecraft-misc
+    # 计划：非标准的键，没有其他 minecraft 键值时用来表示是不是 minecraft 相关的内容。
+    tags: { "minecraft": "yes" }
+
+  minecraft/addon:
+    name: 模组来源
+    terms: ["addon", "mod", "模组来源", "模组"]
+    icon: temaki-tools
+    geometry: [point, line, area]
+    category: category-minecraft-misc
+    tags: { "minecraft:addon": "minecraft" }
+
+  minecraft/species:
+    name: Minecraft 物种
+    terms: ["species", "entity", "物种", "实体", "生物"]
+    icon: temaki-plant
+    geometry: [point, line, area]
+    category: category-minecraft-misc
+    tags: { "minecraft:species": "*" }
+
+  minecraft/genus:
+    name: Minecraft 物种大类
+    terms: ["genus", "物种大类", "大类"]
+    icon: temaki-tree_broadleaved
+    geometry: [point, line, area]
+    category: category-minecraft-misc
+    tags: { "minecraft:genus": "*" }
+
+  minecraft/block:
+    name: 单个方块
+    terms: ["block", "方块", "block id"]
+    icon: maki-square-stroked
+    geometry: [point]
+    category: category-minecraft-misc
+    tags: { "minecraft:block": "*" }
+
+  minecraft/block/spawner:
+    name: 刷怪笼
+    terms: ["spawner", "monster spawner", "刷怪笼"]
+    icon: temaki-mineshaft_cage
+    geometry: [point]
+    category: category-minecraft-misc
+    tags: { "minecraft:block": "spawner" }
+
+  minecraft/landuse/village:
+    name: 村民相关区域
+    terms: ["landuse village", "村民区域", "村庄用地"]
+    icon: maki-village
+    geometry: [area]
+    category: category-minecraft-misc
+    tags: { "minecraft:landuse": "village" }
+
+  minecraft/landuse/redstone:
+    name: 红石电路区域
+    terms: ["landuse redstone", "红石电路", "红石区"]
+    icon: temaki-power_circuit
+    geometry: [area]
+    category: category-minecraft-misc
+    tags: { "minecraft:landuse": "redstone" }
+
+  minecraft/landuse/mob_switch:
+    name: 伪和平区域
+    terms: ["landuse mob switch", "伪和平", "mob switch"]
+    icon: temaki-military
+    geometry: [area]
+    category: category-minecraft-misc
+    tags: { "minecraft:landuse": "mob_switch" }
+
+  minecraft/landuse/empty:
+    name: 空置域
+    terms: ["landuse empty", "空置域", "空地"]
+    icon: maki-square-stroked
+    geometry: [area]
+    category: category-minecraft-misc
+    tags: { "minecraft:landuse": "empty" }
+
+  minecraft/landuse/command:
+    name: 命令方块/技术性区域
+    terms: ["landuse command", "命令方块", "技术性区域"]
+    icon: temaki-power_cb
+    geometry: [area]
+    category: category-minecraft-misc
+    tags: { "minecraft:landuse": "command" }
+
+  # ---------------------------------------------------------------------------
+  # 自然类
+  # ---------------------------------------------------------------------------
+
+  minecraft/ocean/yes:
+    name: 海洋
+    terms: ["ocean", "sea", "海洋", "海"]
+    icon: maki-water
+    geometry: [area]
+    category: category-minecraft-nature
+    # 计划：只用于闭合的面元素，任何时候都不显示名称
+    tags: { "minecraft:ocean": "yes" }
+    fields: [name]
+
+  minecraft/nature/yes:
+    name: 自然生成元素
+    terms: ["nature", "natural", "自然生成", "自然"]
+    icon: maki-natural
+    geometry: [point, line, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:nature": "yes" }
+
+  minecraft/structure/ancient_city:
+    name: 远古城市
+    terms: ["ancient city", "远古城市", "深暗之域"]
+    icon: temaki-ruins
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "ancient_city" }
+
+  minecraft/structure/bastion_remnant:
+    name: 堡垒遗迹
+    terms: ["bastion remnant", "堡垒遗迹", "猪灵堡垒"]
+    icon: roentgen-fort
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "bastion_remnant" }
+
+  minecraft/structure/desert_pyramid:
+    name: 沙漠神殿
+    terms: ["desert pyramid", "desert temple", "沙漠神殿"]
+    icon: maki-monument
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "desert_pyramid" }
+
+  minecraft/structure/end_city:
+    name: 末地城
+    terms: ["end city", "末地城"]
+    icon: maki-castle
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "end_city" }
+
+  minecraft/structure/fortress:
+    name: 下界要塞
+    terms: ["nether fortress", "fortress", "下界要塞", "地狱要塞"]
+    icon: roentgen-fort
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "fortress" }
+
+  minecraft/structure/igloo:
+    name: 雪屋
+    terms: ["igloo", "雪屋", "雪房子"]
+    icon: temaki-snow
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "igloo" }
+
+  minecraft/structure/igloo/underground:
+    name: 雪屋（含地下室）
+    terms: ["igloo underground", "雪屋地下室", "雪屋地牢", "含地牢的雪屋"]
+    icon: temaki-mineshaft_cage
+    geometry: [point, area]
+    category: category-minecraft-nature
+    # 计划：可通过 minecraft:structure:igloo:underground=yes 表示包括地牢的雪屋
+    tags:
+      "minecraft:structure": "igloo"
+      "minecraft:structure:igloo:underground": "yes"
+
+  minecraft/structure/jungle_pyramid:
+    name: 丛林要塞
+    terms: ["jungle pyramid", "jungle temple", "丛林要塞", "丛林神庙"]
+    icon: maki-monument
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "jungle_pyramid" }
+
+  minecraft/structure/mansion:
+    name: 林地府邸
+    terms: ["woodland mansion", "mansion", "林地府邸", "鬼屋"]
+    icon: maki-home
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "mansion" }
+
+  minecraft/structure/mineshaft:
+    name: 废弃矿井
+    terms: ["mineshaft", "abandoned mineshaft", "废弃矿井", "矿井"]
+    icon: temaki-mineshaft_cage
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "mineshaft" }
+
+  minecraft/structure/monument:
+    name: 海底神殿
+    terms: ["ocean monument", "monument", "海底神殿", "海底遗迹"]
+    icon: maki-monument
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "monument" }
+
+  minecraft/structure/ocean_ruin:
+    name: 海底废墟
+    terms: ["ocean ruin", "海底废墟", "海底遗迹废墟"]
+    icon: temaki-ruins
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "ocean_ruin" }
+
+  minecraft/structure/pillager_outpost:
+    name: 掠夺者前哨站
+    terms: ["pillager outpost", "outpost", "掠夺者前哨站", "前哨站"]
+    icon: temaki-tower
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "pillager_outpost" }
+
+  minecraft/structure/ruined_portal:
+    name: 废弃传送门
+    terms: ["ruined portal", "废弃传送门"]
+    icon: maki-gate
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "ruined_portal" }
+
+  minecraft/structure/shipwreck:
+    name: 沉船
+    terms: ["shipwreck", "wreck", "沉船", "船只残骸"]
+    icon: roentgen-anchor
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "shipwreck" }
+
+  minecraft/structure/stronghold:
+    name: 要塞
+    terms: ["stronghold", "要塞", "末地要塞"]
+    icon: roentgen-cave
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "stronghold" }
+
+  minecraft/structure/swamp_hut:
+    name: 沼泽小屋
+    terms: ["swamp hut", "witch hut", "沼泽小屋", "女巫小屋"]
+    icon: temaki-swamp
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "swamp_hut" }
+
+  minecraft/structure/trail_ruins:
+    name: 古迹废墟
+    terms: ["trail ruins", "古迹废墟"]
+    icon: temaki-ruins
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "trail_ruins" }
+
+  minecraft/structure/trial_chambers:
+    name: 试炼密室
+    terms: ["trial chambers", "试炼密室"]
+    icon: roentgen-cave
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "trial_chambers" }
+
+  minecraft/structure/village:
+    name: 村庄
+    terms: ["village", "村庄", "村子", "NPC 村庄"]
+    icon: maki-village
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:structure": "village" }
+
+  minecraft/ore_vein/copper:
+    name: 铜矿脉
+    terms: ["copper ore vein", "铜矿脉", "铜矿"]
+    icon: temaki-pick_hammer
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:ore_vein": "copper" }
+
+  minecraft/ore_vein/iron:
+    name: 铁矿脉
+    terms: ["iron ore vein", "铁矿脉", "铁矿"]
+    icon: maki-diamond
+    geometry: [point, area]
+    category: category-minecraft-nature
+    tags: { "minecraft:ore_vein": "iron" }
+
+  # ---------------------------------------------------------------------------
+  # 基建类
+  # ---------------------------------------------------------------------------
+
+  minecraft/amenity/ghast_parking:
+    name: 恶魂停车场
+    terms: ["ghast parking", "恶魂停车场", "恶魂"]
+    icon: temaki-car_parked
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "ghast_parking" }
+
+  minecraft/amenity/nautilus_parking:
+    name: 鹦鹉螺港
+    terms: ["nautilus parking", "鹦鹉螺港", "鹦鹉螺"]
+    icon: temaki-boat
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "nautilus_parking" }
+
+  minecraft/amenity/elytra:
+    name: 鞘翅起飞点
+    terms: ["elytra", "鞘翅起飞点", "鞘翅"]
+    icon: maki-rocket
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "elytra" }
+
+  minecraft/amenity/villager_clinic:
+    name: 僵尸村民治疗站
+    terms: ["villager clinic", "僵尸村民治疗站", "打折机"]
+    icon: maki-doctor
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "villager_clinic" }
+
+  minecraft/amenity/villager_love_hotel:
+    name: 村民繁殖站
+    terms: ["villager love hotel", "村民繁殖站", "繁殖机"]
+    icon: maki-heart
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "villager_love_hotel" }
+
+  minecraft/amenity/villager_exchange:
+    name: 村民交易所
+    terms: ["villager exchange", "村民交易所", "交易所"]
+    icon: maki-shop
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "villager_exchange" }
+
+  minecraft/amenity/enchanting:
+    name: 公共附魔台
+    terms: ["enchanting", "enchanting table", "附魔台", "附魔"]
+    icon: maki-star
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "enchanting" }
+
+  minecraft/amenity/ender_chest:
+    name: 公共末影箱
+    terms: ["ender chest", "末影箱"]
+    icon: temaki-storage
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "ender_chest" }
+
+  minecraft/amenity/chicken_bbq:
+    name: 烤鸡机
+    terms: ["chicken bbq", "烤鸡机", "鸡肉"]
+    icon: fas-drumstick-bite
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "chicken_bbq" }
+
+  minecraft/amenity/working_station:
+    name: 公共工作站
+    terms: ["working station", "公共工作站", "工作方块"]
+    icon: temaki-tools
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "working_station" }
+
+  minecraft/amenity/afk_pool:
+    name: 挂机池
+    terms: ["afk pool", "挂机池", "挂机"]
+    icon: maki-water
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:amenity": "afk_pool" }
+
+  minecraft/portal/yes:
+    name: 传送门（不表示种类）
+    terms: ["portal", "传送门", "门"]
+    icon: maki-gate
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:portal": "yes" }
+
+  minecraft/portal/gate:
+    name: 垂直门框类传送门
+    terms: ["portal gate", "垂直门框类", "下界传送门框架"]
+    icon: temaki-gate
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:portal": "gate" }
+
+  minecraft/portal/podium:
+    name: 水平类传送门
+    terms: ["portal podium", "水平类", "末地传送门框架"]
+    icon: maki-entrance-alt1
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:portal": "podium" }
+
+  minecraft/portal/gateway:
+    name: 开放接触式传送门
+    terms: ["portal gateway", "开放接触式", "折跃门"]
+    icon: maki-gate
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:portal": "gateway" }
+
+  minecraft/portal/stone:
+    name: 交互式传送石
+    terms: ["portal stone", "传送石", "交互式传送门"]
+    icon: maki-circle-stroked
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:portal": "stone" }
+
+  # 计划：minecraft:portal:type 必须包含 minecraft:portal，所以这里把两者一起写死。
+  # 取值同时符合计划对「垂直门框类 / 水平类 / 开放接触式」的划分，否则 carto4mc 的
+  # minecraft-amenity-points 图层（规则要求 minecraft_portal != null）不会出图。
+  minecraft/portal/type/nether:
+    name: 下界传送门
+    terms: ["nether portal", "下界传送门", "地狱门"]
+    icon: maki-fire-station
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags:
+      "minecraft:portal": "gate"
+      "minecraft:portal:type": "nether"
+
+  minecraft/portal/type/end:
+    name: 末地传送门和返回传送门
+    terms: ["end portal", "末地传送门", "返回传送门"]
+    icon: maki-star-stroked
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags:
+      "minecraft:portal": "podium"
+      "minecraft:portal:type": "end"
+
+  minecraft/portal/type/gateway:
+    name: 末地折跃门
+    terms: ["end gateway", "末地折跃门", "折跃门"]
+    icon: maki-gate
+    geometry: [point, line, area]
+    category: category-minecraft-infrastructure
+    tags:
+      "minecraft:portal": "gateway"
+      "minecraft:portal:type": "gateway"
+
+  minecraft/sport/pvp:
+    name: PVP 竞技场
+    terms: ["pvp", "玩家对抗", "竞技场"]
+    icon: maki-pitch
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:sport": "pvp" }
+
+  minecraft/sport/1v1duel:
+    name: 二人决斗场
+    terms: ["1v1 duel", "二人决斗", "决斗"]
+    icon: maki-pitch
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:sport": "1v1duel" }
+
+  minecraft/sport/brawl:
+    name: 多人混战场
+    terms: ["brawl", "多人混战", "混战"]
+    icon: maki-pitch
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:sport": "brawl" }
+
+  minecraft/sport/spleef:
+    name: 掘一死战场
+    terms: ["spleef", "掘一死战"]
+    icon: temaki-snow
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:sport": "spleef" }
+
+  minecraft/sport/speedrun:
+    name: 速通场地
+    terms: ["speedrun", "速通"]
+    icon: maki-star
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:sport": "speedrun" }
+
+  minecraft/sport/pve:
+    name: PVE 场地
+    terms: ["pve", "玩家对电脑"]
+    icon: maki-pitch
+    geometry: [point, area]
+    category: category-minecraft-infrastructure
+    tags: { "minecraft:sport": "pve" }
+
+  # ---------------------------------------------------------------------------
+  # 生产类
+  # ---------------------------------------------------------------------------
+
+  minecraft/industrial/furnace:
+    name: 大型熔炉组
+    terms: ["furnace", "熔炉组", "熔炉"]
+    icon: temaki-fireplace
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "furnace" }
+    fields: [name, minecraft_industrial, minecraft_product]
+
+  minecraft/industrial/cobblestone_generator:
+    name: 大型刷石机
+    terms: ["cobblestone generator", "刷石机", "玄武岩机"]
+    icon: temaki-pick_hammer
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "cobblestone_generator" }
+
+  minecraft/industrial/classification:
+    name: 大型公共物品分类机
+    terms: ["classification", "全物品", "分类机"]
+    icon: temaki-storage
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "classification" }
+    # 计划：本身不参与渲染，需要配合其他仓储类标签
+    fields: [name, minecraft_industrial, minecraft_product]
+
+  minecraft/industrial/tree_farm:
+    name: 全自动树厂
+    terms: ["tree farm", "树厂", "大蘑菇机"]
+    icon: maki-park-alt1
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "tree_farm" }
+
+  minecraft/industrial/farmland:
+    name: 农厂
+    terms: ["farmland", "farm", "农厂", "农场"]
+    icon: fas-tractor
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "farmland" }
+
+  minecraft/industrial/iron_golem_farm:
+    name: 刷铁机
+    terms: ["iron golem farm", "iron farm", "刷铁机"]
+    icon: maki-industry
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "iron_golem_farm" }
+
+  minecraft/industrial/ice:
+    name: 刷冰机
+    terms: ["ice farm", "刷冰机", "冰厂"]
+    icon: temaki-ice_fishing
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "ice" }
+
+  minecraft/industrial/potion:
+    name: 大型多功能药水机
+    terms: ["potion farm", "药水机", "酿造"]
+    icon: fas-flask
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "potion" }
+
+  minecraft/industrial/agrarian:
+    name: 植物催熟剂机械
+    terms: ["bone meal farm", "骨粉机", "催熟剂"]
+    icon: temaki-plant
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:industrial": "agrarian" }
+
+  # 计划：minecraft:industrial=mob_farm 是总类，下面用 minecraft:mob_farm=* 细分。
+  # 这里**故意只写 industrial=mob_farm**：carto4mc 的通用刷怪塔图案规则是
+  # `[minecraft_industrial = 'mob_farm'][minecraft_mob_farm = null]`，
+  # 如果顺手塞一个 minecraft:mob_farm（"*" 值在 iD 里会落成 =yes），
+  # 那条规则反而匹配不上，通用图标就丢了。
+  minecraft/industrial/mob_farm:
+    name: 刷怪塔
+    terms: ["mob farm", "刷怪塔", "刷怪塔总类"]
+    icon: maki-industry
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+
+  minecraft/mob_farm/slaughterhouse:
+    name: 和平生物刷怪塔
+    terms: ["slaughterhouse", "和平生物刷怪塔", "疣猪塔"]
+    icon: fas-drumstick-bite
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "slaughterhouse"
+
+  minecraft/mob_farm/pigman:
+    name: 猪人刷怪塔
+    terms: ["pigman farm", "猪人刷怪塔", "猪人塔"]
+    icon: maki-fire-station
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "pigman"
+
+  minecraft/mob_farm/swamp:
+    name: 沼泽刷怪塔
+    terms: ["swamp farm", "沼泽刷怪塔", "女巫塔"]
+    icon: temaki-swamp
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "swamp"
+
+  minecraft/mob_farm/spawner:
+    name: 刷怪笼刷怪塔
+    terms: ["spawner farm", "刷怪笼刷怪塔", "刷怪笼"]
+    icon: temaki-mineshaft_cage
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "spawner"
+
+  minecraft/mob_farm/creaking:
+    name: 嘎吱刷怪塔
+    terms: ["creaking farm", "嘎吱刷怪塔", "嘎吱"]
+    icon: temaki-tree_stump
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "creaking"
+
+  minecraft/mob_farm/shulker:
+    name: 潜影贝刷怪塔
+    terms: ["shulker farm", "潜影贝刷怪塔", "潜影贝"]
+    icon: fas-box
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "shulker"
+
+  minecraft/mob_farm/pillager_outpost:
+    name: 改造后的前哨站
+    terms: ["pillager outpost farm", "改造前哨站", "前哨站刷怪塔"]
+    icon: temaki-tower
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "pillager_outpost"
+
+  minecraft/mob_farm/raid:
+    name: 掠夺塔
+    terms: ["raid farm", "掠夺塔", "袭击塔"]
+    icon: temaki-military
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "raid"
+
+  minecraft/mob_farm/enderman:
+    name: 末影人刷怪塔
+    terms: ["enderman farm", "末影人刷怪塔", "末影人塔"]
+    icon: roentgen-diamond
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "enderman"
+
+  minecraft/mob_farm/guardian:
+    name: 远古守卫者刷怪塔
+    terms: ["guardian farm", "远古守卫者刷怪塔", "守卫者塔"]
+    icon: temaki-water_device
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "guardian"
+
+  minecraft/mob_farm/gravity:
+    name: 刷沙机
+    terms: ["gravity farm", "刷沙机", "重力方块机"]
+    icon: temaki-sandbox
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "gravity"
+
+  minecraft/mob_farm/fish:
+    name: 鱼塔
+    terms: ["fish farm", "鱼塔", "钓鱼机"]
+    icon: temaki-fish_ladder
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags:
+      "minecraft:industrial": "mob_farm"
+      "minecraft:mob_farm": "fish"
+
+  minecraft/craft/crafter:
+    name: 自动合成设备
+    terms: ["crafter", "自动合成", "合成流水线"]
+    icon: temaki-anvil_and_hammer
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "crafter" }
+
+  minecraft/craft/carpet:
+    name: 地毯机
+    terms: ["carpet duper", "地毯机", "刷地毯"]
+    icon: maki-garden
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "carpet" }
+
+  minecraft/craft/railway:
+    name: 刷铁轨机
+    terms: ["rail duper", "刷铁轨机", "铁轨机"]
+    icon: maki-rail
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "railway" }
+
+  minecraft/craft/snow:
+    name: 刷雪机
+    terms: ["snow farm", "刷雪机", "雪机"]
+    icon: temaki-snow
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "snow" }
+
+  minecraft/craft/destroy:
+    name: 方块破坏室
+    terms: ["block destroyer", "方块破坏室", "TNT 破坏"]
+    icon: temaki-bulldozer
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "destroy" }
+
+  minecraft/craft/slaughterhouse:
+    name: 处死装置
+    terms: ["kill chamber", "处死装置", "处死"]
+    icon: fas-drumstick-bite
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "slaughterhouse" }
+
+  minecraft/craft/update_suppressor:
+    name: 更新抑制/跳略装置
+    terms: ["update suppressor", "更新抑制装置", "更新跳略"]
+    icon: temaki-power_switch
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "update_suppressor" }
+
+  minecraft/craft/packager:
+    name: 打包器
+    terms: ["packager", "打包器"]
+    icon: fas-box
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "packager" }
+
+  minecraft/craft/unpackager:
+    name: 拆包器
+    terms: ["unpackager", "拆包器", "烧包器"]
+    icon: fas-box-open
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "unpackager" }
+
+  minecraft/craft/panel:
+    name: 前端界面/控制面板
+    terms: ["control panel", "控制面板", "前端界面"]
+    icon: fas-microchip
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "panel" }
+
+  minecraft/craft/chunk_loader:
+    name: 区块加载器
+    terms: ["chunk loader", "区块加载器", "加载器"]
+    icon: temaki-antenna
+    geometry: [point, area]
+    category: category-minecraft-production
+    tags: { "minecraft:craft": "chunk_loader" }
+
+  minecraft/product:
+    name: 产出类别
+    terms: ["product", "产出", "产物"]
+    icon: maki-warehouse
+    geometry: [point, line, area]
+    category: category-minecraft-production
+    tags: { "minecraft:product": "*" }
+
+  minecraft/conveyor:
+    name: 传送带
+    terms: ["conveyor", "传送带", "运输"]
+    icon: temaki-conveyor
+    geometry: [point, line, area]
+    category: category-minecraft-production
+    tags: { "minecraft:conveyor": "*" }
+
+  # ---------------------------------------------------------------------------
+  # 红石类
+  # ---------------------------------------------------------------------------
+
+  minecraft/redstone/yes:
+    name: 红石机械
+    terms: ["redstone", "红石机械", "红石"]
+    icon: temaki-power_circuit
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "yes" }
+
+  minecraft/redstone/music:
+    name: 红石音乐盒
+    terms: ["redstone music", "note block", "红石音乐", "音乐盒"]
+    icon: maki-music
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "music" }
+
+  minecraft/redstone/cannon:
+    name: 定向抛射设施
+    terms: ["redstone cannon", "tnt cannon", "红石炮", "大炮"]
+    icon: temaki-military
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "cannon" }
+
+  minecraft/redstone/timer:
+    name: 计时器
+    terms: ["timer", "计时器", "时钟"]
+    icon: roentgen-clock
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "timer" }
+
+  minecraft/redstone/memory:
+    name: 数据存储设备
+    terms: ["memory", "数据存储", "存储器"]
+    icon: fas-microchip
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "memory" }
+
+  minecraft/redstone/monitor:
+    name: 显示屏幕
+    terms: ["monitor", "display", "显示屏幕", "屏幕"]
+    icon: temaki-power_cb2
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "monitor" }
+
+  minecraft/redstone/tnt_spawner:
+    name: TNT 生成装置
+    terms: ["tnt duper", "tnt spawner", "TNT 生成", "复制机"]
+    icon: fas-dumpster-fire
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags: { "minecraft:redstone": "tnt_spawner" }
+
+  minecraft/signal_wired/yes:
+    name: 信号传输线
+    terms: ["signal wired", "红石线", "信号线", "数据线"]
+    icon: temaki-cable
+    geometry: [line]
+    category: category-minecraft-redstone
+    tags: { "minecraft:signal_wired": "yes" }
+
+  # 计划：minecraft:cannon=* 必须添加 minecraft:redstone=cannon，所以一起写
+  minecraft/cannon/tnt:
+    name: TNT 大炮
+    terms: ["tnt cannon", "TNT 大炮", "大炮"]
+    icon: temaki-military
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags:
+      "minecraft:redstone": "cannon"
+      "minecraft:cannon": "tnt"
+
+  minecraft/cannon/end_pearl:
+    name: 末影珍珠炮
+    terms: ["end pearl cannon", "末影珍珠炮", "珍珠炮"]
+    icon: maki-rocket
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags:
+      "minecraft:redstone": "cannon"
+      "minecraft:cannon": "end_pearl"
+
+  minecraft/cannon/arrow:
+    name: 箭矢加速器
+    terms: ["arrow cannon", "箭矢加速器", "箭炮"]
+    icon: temaki-shield
+    geometry: [point, area]
+    category: category-minecraft-redstone
+    tags:
+      "minecraft:redstone": "cannon"
+      "minecraft:cannon": "arrow"

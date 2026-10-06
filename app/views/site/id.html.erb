@@ -14,7 +14,27 @@
    end
    data[:locale] = ID::LOCALES.preferred(preferred_languages).to_s
    data[:theme] = current_user&.preferred_color_scheme(:editor, :site)
-   data[:asset_map] = assets("@openstreetmap/id").to_json %>
+   # iD resolves its data files through this map (context.asset() looks up
+   # "<assetPath><logical name>"). Pointing the imagery entry at our own
+   # controller replaces iD's built-in list - 1300+ third party sources, most of
+   # which need API keys - with just the basemaps this instance actually serves
+   # (config/id_imagery.yml). Everything else keeps coming from the iD bundle.
+   #
+   # 同样地，把 iD 的 tagging schema（预设 / 字段 / 分类 / 默认列表 + 语言包）
+   # 指到我们自己的产物：config/id_minecraft/ 里是「iD 基础 schema + 本项目
+   # minecraft:* 元素预设」合并出来的 JSON，由
+   # scripts/build_id_minecraft_presets.rb 生成、IdPresetsController 伺服。
+   # 产物不存在时 asset_map_entries 是空 Hash，页面行为与改动前完全一致。
+   #
+   # 只加 asset map 是不够的：这几个文件在 iD 的 fileMap 里是**绝对 CDN URL**，
+   # 而 iD 的 context.asset() 对 http(s) 开头的值直接原样返回、根本不查 asset
+   # map（modules/core/file_fetcher.js）。所以还要把 fileMap 里那几个键换成
+   # 相对路径 —— 见下面 data[:id_schema_files] 与 app/assets/javascripts/id.js。
+   data[:asset_map] = assets("@openstreetmap/id").merge(
+     "@openstreetmap/id/dist/data/imagery.min.json" => id_imagery_path
+   ).merge(IdMinecraftPresets.asset_map_entries).to_json
+   # iD fileMap 的覆盖表（逻辑键 -> 相对路径），由 id.js 在 init() 之前套用。
+   data[:id_schema_files] = IdMinecraftPresets.file_map.to_json %>
 <%= tag.div "", :id => "id-container", :data => data %>
 </body>
 </html>

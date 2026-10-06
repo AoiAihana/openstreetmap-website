@@ -12,6 +12,32 @@ document.addEventListener("DOMContentLoaded", function () {
       "Please upgrade your browser or use JOSM to edit the map.";
     container.className = "unsupported";
   } else {
+    // iD 默认在浏览器里直接去 jsDelivr 取 tagging schema（presets / fields /
+    // 分类 / 默认列表 / tagging 语言包）。那几个值在 iD 的 fileMap 里是**绝对
+    // URL**，而 iD 的 asset() 对 http(s) 开头的值直接原样返回、不查 asset map
+    // （modules/core/file_fetcher.js），所以「只往 asset_map 里加条目」是不生效的。
+    //
+    // 这里先把 fileMap 里那几个键换成相对路径（data/xxx.min.json），asset() 才会
+    // 走 assetPath("@openstreetmap/id/dist/") + assetMap 这条路 —— 也就是底图
+    // imagery.min.json 一直在走的那条路 —— 最终落到 IdPresetsController，
+    // 内容是 config/id_minecraft/ 里「iD 基础 schema + minecraft:* 预设」的合并产物。
+    //
+    // 覆盖表由 Rails 端给出（site/id.html.erb 的 data-id-schema-files，
+    // 内容来自 IdMinecraftPresets.file_map）；产物没构建时它是空对象，行为不变。
+    //
+    // ⚠️ iD.fileFetcher 是 coreFileFetcher 的**单例对象**（iD.js 里
+    // `export { _mainFileFetcher as fileFetcher }`），它**不是函数** ——
+    // 千万别写成 iD.fileFetcher()。那会抛
+    // `TypeError: iD.fileFetcher is not a function`，而这段代码在
+    // DOMContentLoaded 回调里、iD.coreContext() 之前，一抛异常编辑器就再也不会
+    // 初始化：打开 /id 只有一片空白 + 控制台一条报错。
+    // （对比：iD.coreContext / iD.utilDetect 导出的是函数，所以它们要加括号。）
+    const schemaFiles = JSON.parse(container.dataset.idSchemaFiles || "null") || {};
+    const iDFileMap = iD.fileFetcher.fileMap();
+    Object.keys(schemaFiles).forEach(function (key) {
+      iDFileMap[key] = schemaFiles[key];
+    });
+
     const idContext = iD.coreContext();
     idContext.connection().apiConnections([]);
     const url = location.protocol + "//" + location.host;

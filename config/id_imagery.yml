@@ -1,0 +1,109 @@
+# iD 编辑器（/id）的底图列表。
+#
+# 这个文件**完整替代**了 iD 自带的底图清单。iD 上游会在启动时 fetch 自己的
+# dist/data/imagery.min.json —— 里面有 1300 多个第三方影像源（Bing、Esri、
+# Mapbox、各国测绘局……），绝大多数需要 API key，或者跟本实例的数据毫无关系。
+# app/views/site/id.html.erb 把 asset map 里指向那个文件的那一项改指到
+# IdImageryController，于是编辑器里只会出现下面列出的这几项。
+#
+# 字段沿用 iD / editor-layer-index 的 imagery schema，常用字段：
+#
+#   id           唯一标识。也是 URL hash 里 ?background=<id> 用的名字
+#   name         「背景设置」面板里显示的名称
+#   type         瓦片类型：
+#                  "tms" = 标准 XYZ 栅格瓦片（见下面的占位符说明）
+#                  "wms" = WMS 服务；"bing" = Bing 影像
+#   template     瓦片 URL 模板。**占位符是 {zoom} 而不是 Leaflet 的 {z}**，
+#                另可用 {x} / {y} / {width} / {height} / {bbox} / {proj}。
+#                "tms" 类型的 {y} 是标准 XYZ 方向（自北向南），不是 OSGeo TMS 的翻转方向。
+#   zoomExtent   [最小层级, 最大层级]。iD 不会请求这个范围之外的层级。
+#   category     分组名，iD 会翻译成界面上的分类。常用：
+#                  "osmbasedmap"（OSM 系底图）、"other"（其它栅格底图）
+#   default      是否作为默认底图。整个列表里只应有一个为 true。
+#   description  说明文字，显示在名称下方
+#   terms_text   版权/许可文字
+#   terms_url    版权链接
+#
+# 改动本文件**不需要**重新预编译前端资产：它由 IdImageryController 在请求时
+# 读取并渲染成 JSON（跟 config/layers.yml 不一样，那份是在编译期内联进 bundle 的）。
+#
+# 另外，这里出现的所有瓦片源 origin 会被 config/initializers/content_security_policy.rb
+# 自动加进 CSP 的 img-src / connect-src，不需要另外去改 CSP。
+
+# ---------------------------------------------------------------------------
+# OpenStreetMap（标准）
+#
+# 这是本实例唯一保留的常规底图。地址指向 edge 反代（见 ../../edge/default.conf），
+# 由它转到 renderd/mod_tile 容器（osm-carto4mc 从同一个 PostGIS 库渲染），
+# 而不是官方的 tile.openstreetmap.org —— 也就是说，地图上看到的正是本实例自己
+# 的数据。
+#
+# 地址是**根相对路径**，不是 http://localhost:8080/tile/...：
+# 别的设备（局域网 / 内网穿透）上 localhost 指的是那台设备自己，绝对地址会让
+# 瓦片全部加载失败。相对路径则由浏览器按当前 origin 解析，本机 / 局域网 IP /
+# 穿透域名共用同一份配置，并且只需要穿透 edge 一个端口。
+# ---------------------------------------------------------------------------
+- id: "MAPNIK"
+  name: "OpenStreetMap (Standard)"
+  type: "tms"
+  template: "/tile/{zoom}/{x}/{y}.png"
+  category: "osmbasedmap"
+  zoomExtent: [0, 19]
+  default: true
+  description: "本实例自行渲染的 OpenStreetMap Carto 底图。"
+  terms_text: "© OpenStreetMap contributors, ODbL 1.0"
+  terms_url: "https://www.openstreetmap.org/copyright"
+
+# ---------------------------------------------------------------------------
+# Minecraft（dyn2xyz）
+#
+# 由 dyn2xyz 把上游 Dynmap 的瓦片实时转译成标准 XYZ 瓦片。
+# 地址同样是根相对路径，经 edge 转发到 dyn2xyz 容器（容器内 8080，
+# 宿主机端口对应 ../.env 里的 DYN2XYZ_PORT，默认 8090）。
+#
+# zoomExtent 必须与 http://localhost:3000/tilejson.json 里的
+# minzoom / maxzoom 保持一致：dyn2xyz 只会服务 Dynmap 实际提供得了的那些层级，
+# 写成别的值只会让 iD 去请求拿不到数据的层级。
+# 当前值是 13–21（`docker compose exec dyn2xyz python -m app.main --check
+# /config/dyn2xyz.toml` 会把范围打印出来；改过 dyn2xyz 配置就回来核对一下）。
+# 想换地图来源就改 dyn2xyz/config/dyn2xyz.toml，然后回来核对这两个数字
+# （`docker compose exec dyn2xyz python -m app.main --check /config/dyn2xyz.toml`
+# 会把范围打印出来）。
+# ---------------------------------------------------------------------------
+- id: "MC_DYN2XYZ"
+  name: "Minecraft（dyn2xyz）"
+  type: "tms"
+  template: "/tiles/{zoom}/{x}/{y}.png"
+  category: "other"
+  zoomExtent: [13, 21]
+  default: false
+  description: "Minecraft 地图，由 dyn2xyz 从 Dynmap 瓦片实时转译。可用缩放 13–21。"
+  terms_text: "地图数据来自上游 Dynmap 服务"
+
+# ---------------------------------------------------------------------------
+# 兼容占位：id 必须恰好是 "Bing"
+#
+# iD 的「导览 / walkthrough」里硬编码了 INTRO_IMAGERY = "Bing"：
+#
+#     let imagery = context.background().findSource("Bing");
+#     if (imagery) { context.background().baseLayerSource(imagery); }
+#     else         { context.background().bing(); }   // 内部还是 findSource("Bing")
+#
+# 上游 iD 自带的清单里含 Bing，所以那条 else 分支永远走不到。我们把清单换掉之后
+# 它就成了 null，而 baseLayerSource(null) 会在 d2.template() 上抛 TypeError——
+# 偏偏它抛在 context.inIntro(true) **之后**，于是编辑器会被卡在导览模式、无法编辑。
+# 触发路径很普通：首次打开编辑器时的欢迎页上点「开始导览」。
+#
+# 所以这里放一条**只为满足这次查找**的条目。它带一个极小的 polygon，而 iD 只会把
+# 「polygon 覆盖当前视野」的源列进「背景设置」（见 background 里 visible[source.id]
+# 那行判断），所以正常情况下**它不会出现在底图列表里**。
+# 只有把视野真的移到那个点上（北极圈内一个 0.001° 的小方块）才会看到它。
+# 它指向的瓦片是本地 osm-carto4mc，万一被选中也不会报错，只是名字会提醒你不该用它。
+# ---------------------------------------------------------------------------
+- id: "Bing"
+  name: "Bing（兼容占位，请勿使用）"
+  type: "tms"
+  template: "/tile/{zoom}/{x}/{y}.png"
+  category: "other"
+  zoomExtent: [0, 19]
+  polygon: [[[179.999, 84.999], [180.0, 84.999], [180.0, 85.0], [179.999, 85.0], [179.999, 84.999]]]

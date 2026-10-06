@@ -1,3 +1,19 @@
+# Base layers offered by this private instance.
+#
+# Upstream ships a long list here (CyclOSM, CycleMap, TransportMap,
+# Tracestrack, HOT, Shortbread, OpenMapTiles). Those all point at third party
+# or commercial tile services, several of which need API keys, and none of them
+# say anything about THIS instance's data - so they are deliberately removed and
+# only the standard layer, rendered locally by osm-carto4mc out of the
+# same PostGIS instance the API and the iD editor use, is left.
+#
+# NOTE: the front end does not read this file at request time - it is inlined
+# into the javascript bundle by app/assets/javascripts/osm.js.erb and
+# embed.js.erb while Sprockets compiles it. Those templates now declare a
+# `depend_on` on this file, so editing it does invalidate the bundle. Without
+# that declaration Sprockets kept serving the previously compiled copy and
+# changes here had no visible effect until the asset cache was cleared by hand.
+
 - leafletOsmId: "Mapnik"
   code: "M"
   layerId: "mapnik"
@@ -6,133 +22,22 @@
   canEmbed: true
   canDownloadImage: true
   maxZoom: 19
-  tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+  # 根相对路径：浏览器会向「它加载页面的那个 origin」要瓦片，由 edge 反代
+  # （见 ../../edge/default.conf）转发到 tileserver 容器。
+  #
+  # 以前这里是 http://localhost:8080/tile/...。在本机看没问题，但任何别的设备
+  # （局域网 / 内网穿透）上 localhost 指的是那台设备自己，于是瓦片一张都加载
+  # 不出来——多穿透几个端口也没用，因为请求根本没发到这台机器。
+  # 改成相对路径后，本机、局域网 IP、穿透域名三种访问方式共用同一份配置，
+  # 而且只需要穿透 edge 那一个端口。
+  #
+  # 注意：这个文件是在编译期被 app/assets/javascripts/osm.js.erb 内联进 JS
+  # bundle 的，改完必须重建 bundle（docker compose restart web，
+  # web/start.sh 会检测到本文件变新后自动 assets:precompile）。
+  # CSP 的 img-src / connect-src 由 config/initializers/content_security_policy.rb
+  # 从这个文件推导；相对地址属于同源，已经由 :self 覆盖，不需要再列。
+  tileUrl: "/tile/{z}/{x}/{y}.png"
   credit:
     id: "make_a_donation"
     href: "https://supporting.openstreetmap.org"
     donate: true
-
-- leafletOsmId: "CyclOSM"
-  code: "Y"
-  layerId: "cyclosm"
-  nameId: "cyclosm"
-  wiki: "https://wiki.openstreetmap.org/wiki/CyclOSM"
-  canEmbed: true
-  maxZoom: 20
-  tileUrl: "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
-  subdomains: [a, b, c]
-  credit:
-    id: "cyclosm_credit"
-    children:
-      cyclosm_link:
-        id: "cyclosm_name"
-        href: "https://www.cyclosm.org"
-      osm_france_link:
-        id: "osm_france"
-        href: "https://openstreetmap.fr/"
-
-- leafletOsmId: "CycleMap"
-  code: "C"
-  layerId: "cyclemap"
-  nameId: "cycle_map"
-  wiki: "https://wiki.openstreetmap.org/wiki/OpenCycleMap"
-  apiKeyId: "thunderforest_key"
-  canEmbed: true
-  canDownloadImage: true
-  maxZoom: 21
-  tileUrl: "https://api.thunderforest.com/cycle/{z}/{x}/{y}{ratio}.png?apikey={apikey}"
-  credit:
-    id: "thunderforest_credit"
-    children:
-      thunderforest_link:
-        id: "andy_allan"
-        href: "https://www.thunderforest.com/"
-
-- leafletOsmId: "TransportMapVector"
-  leafletOsmDarkId: "TransportDarkMapVector"
-  code: "T"
-  layerId: "transportmap"
-  nameId: "transport_map"
-  wiki: "https://wiki.openstreetmap.org/wiki/Transport_Map"
-  apiKeyId: "thunderforest_key"
-  canEmbed: true
-  canDownloadImage: true
-  maxZoom: 23
-  isVectorStyle: true
-  styleUrl: "https://api.thunderforest.com/styles/transport/style.json?apikey={apikey}"
-  styleUrlDark: "https://api.thunderforest.com/styles/transport-dark/style.json?apikey={apikey}"
-  credit:
-    id: "thunderforest_credit"
-    children:
-      thunderforest_link:
-        id: "andy_allan"
-        href: "https://www.thunderforest.com/"
-
-- leafletOsmId: "TracestrackTopo"
-  code: "P"
-  layerId: "tracestracktopo"
-  nameId: "tracestracktop_topo"
-  wiki: "https://wiki.openstreetmap.org/wiki/Tracestrack"
-  apiKeyId: "tracestrack_key"
-  maxZoom: 19
-  tileUrl: "https://tile.tracestrack.com/topo__/{z}/{x}/{y}.webp?key={apikey}"
-  credit:
-    id: "tracestrack_credit"
-    children:
-      tracestrack_link:
-        id: "tracestrack"
-        href: "https://www.tracestrack.com/"
-
-- leafletOsmId: "HOT"
-  code: "H"
-  layerId: "hot"
-  nameId: "hot"
-  wiki: "https://wiki.openstreetmap.org/wiki/Humanitarian"
-  canEmbed: true
-  maxZoom: 20
-  tileUrl: "https://tile-{s}.openstreetmap.fr/hot/{z}/{x}/{y}.png"
-  subdomains: [a, b, c]
-  credit:
-    id: "hotosm_credit"
-    children:
-      hotosm_link:
-        id: "hotosm_name"
-        href: "https://www.hotosm.org/"
-      osm_france_link:
-        id: "osm_france"
-        href: "https://openstreetmap.fr/"
-
-- leafletOsmId: "ShortbreadColorful"
-  leafletOsmDarkId: "ShortbreadEclipse"
-  code: "S"
-  layerId: "shortbread"
-  nameId: "shortbread"
-  wiki: "https://wiki.openstreetmap.org/wiki/Shortbread"
-  canEmbed: true
-  maxZoom: 23
-  isVectorStyle: true
-  styleUrl: "https://vector.openstreetmap.org/styles/shortbread/colorful.json"
-  styleUrlDark: "https://vector.openstreetmap.org/styles/shortbread/eclipse.json"
-  credit:
-    id: "make_a_donation"
-    href: "https://supporting.openstreetmap.org"
-    donate: true
-
-- leafletOsmId: "OpenMapTiles"
-  code: "V"
-  layerId: "openmaptiles_osm"
-  nameId: "openmaptiles_osm"
-  wiki: "https://wiki.openstreetmap.org/wiki/MapTiler"
-  apiKeyId: "maptiler_key"
-  maxZoom: 23
-  isVectorStyle: true
-  styleUrl: "https://api.maptiler.com/maps/openstreetmap/style.json?key={apikey}"
-  credit:
-    id: "openmaptiles_credit"
-    children:
-      openmaptiles_link:
-        id: "openmaptiles_name"
-        href: "https://openmaptiles.org/"
-      maptiler_link:
-        id: "maptiler_name"
-        href: "https://www.maptiler.com/"

@@ -27,10 +27,15 @@ Rails.application.configure do
   config.active_storage.service = :local
 
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  config.assume_ssl = true
+  # Defaults to the upstream behaviour; a private instance served over plain HTTP
+  # (no certificates, e.g. a LAN deployment) sets `assume_ssl: false` in
+  # config/settings.local.yml.
+  config.assume_ssl = Settings.key?(:assume_ssl) ? Settings.assume_ssl : true
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  config.force_ssl = true
+  # Same override as above: with `force_ssl: false` the site stays reachable over
+  # http:// instead of redirecting every request to https://.
+  config.force_ssl = Settings.key?(:force_ssl) ? Settings.force_ssl : true
 
   # Skip http-to-https redirect for the default health check endpoint.
   # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
